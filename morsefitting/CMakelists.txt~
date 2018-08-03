@@ -1,0 +1,9 @@
+
+SET(ALL_MODULES_F90 
+)
+
+SET(ALL_MODULES_F 
+bubblesort.f    crossprod.f     factorials.f    rnd.f           sffteu.f        splib.f         splines.f
+)
+
+ADD_LIBRARY(morsefitting STATIC ${ALL_MODULES_F90} ${ALL_MODULES_F})

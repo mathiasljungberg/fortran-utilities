@@ -1,0 +1,288 @@
+program calculate_efield
+use parameters
+use hist_class
+
+implicit none 
+
+!parameters
+integer,parameter::maxatoms=10000
+!real(kind=wp),parameter::bohr=0.52917725
+!real(kind=wp), parameter:: pi=3.14159265
+
+!input/output
+integer::natoms,ewater,ehyd,period,all,nhbondfiles, broad, h_n
+integer, dimension(:), allocatable::hbondfile_length,hbondalt
+integer, dimension(:,:), allocatable::nhbond_water,nhbond_hyd
+character(75)::inputfile,outputfile,dummy
+character(75),dimension(:),allocatable ::hbondfile
+character(5), dimension(maxatoms)::atomtype
+real(kind=wp),dimension(3)::cell,cella
+real(kind=wp),dimension(maxatoms)::x,y,z
+real(kind=wp):: qo, qh1, qh2,cutoff,fwhm, h_start,h_end
+
+!loop variables
+integer :: i,ii,i1,i2,i3,count,j1,j2,loop1,loop2, iii,j
+
+!functions
+real(kind=wp)::dnrm2,ddot
+
+!other variables
+integer::noxygen,flag,flag0
+real(kind=wp),dimension(3):: ind,cx,boxvec,r,E,rh,ro,roh,rhyd,per,E_old, r_tmp
+integer,dimension(3)::nbox
+real(kind=wp)::fac, E_proj
+type(hist)::histfreq
+type(hist), dimension(:), allocatable::histhyd1,histhyd2
+integer::length, hist1,hist2, hist1_tmp,hist2_tmp
+character(75)::string
+!real(kind=wp)::cutoff,q
+
+!interfaces
+interface
+   subroutine efield(x, y, z, natoms, nbox, ewater, ehyd, cell, fac, cutoff, qo, qh1, qh2, E, roh )
+     use parameters
+     real(kind=wp), dimension(:), intent(in) :: x, y, z 
+     integer, intent(in):: natoms,ewater, ehyd
+     integer, dimension(3), intent(in):: nbox
+     real(kind=wp), dimension(3), intent(in) :: cell
+     real(kind=wp), intent(in) :: cutoff, qo, qh1, qh2,fac
+     real(kind=wp), dimension(3), intent(out) :: E, roh 
+   end subroutine efield
+end interface
+
+
+!read from standard input
+read(5,*) inputfile
+read(5,*) outputfile
+read(5,*) nhbondfiles
+
+allocate( hbondfile(nhbondfiles), &
+     hbondfile_length(nhbondfiles), hbondalt(nhbondfiles) )
+
+do i=1,nhbondfiles
+   read(5,*) hbondfile(i), hbondfile_length(i), hbondalt(i)
+end do
+
+allocate(nhbond_water(nhbondfiles, maxval(hbondfile_length)),&
+     nhbond_hyd(nhbondfiles,maxval(hbondfile_length)))
+
+!allocate histograms
+hist1=0
+hist2=0
+do i=1,nhbondfiles
+   if(hbondalt(i) .eq. 1) then
+      hist1 = hist1 +1
+   elseif(hbondalt(i) .eq. 2) then
+      hist1 = hist1 + 1
+      hist2 = hist2 + 1
+   end if
+end do
+allocate(histhyd1(hist1), histhyd2(hist2) )
+
+
+nhbond_water=0
+nhbond_hyd=0
+
+read(5,*) ewater, ehyd, period, all
+read(5,*) qo, qh1, qh2
+read(5,*) cutoff
+read(5,*) broad, fwhm, h_start, h_end, h_n
+
+! new line for hbond file of length hbondfile_length. if hbondalt = 1 then only
+! one column, calculate both hydrogens. if hbondalt = 2 then two columns, separate 
+! the two hydrogens in two different files 
+
+! read atoms
+open(10,file=inputfile,status='old')
+  read(10,*) natoms, cell(1)
+  !read(10,*) dummy,cell(1),cell(2),cell(3),cella(1),cella(2),cella(3)
+  do i=1,natoms
+     read(10,*) atomtype(i),x(i),y(i),z(i)
+  enddo
+close(10)
+
+cell(2)= cell(1)
+cell(3)= cell(1)
+
+! read hbondfiles
+do i=1,nhbondfiles
+   open(10,file=hbondfile(i),status='old')
+   if(hbondalt(i).eq.1) then 
+      do j=1, hbondfile_length(i)
+         read(10,*) nhbond_water(i,j)
+      end do
+   else if(hbondalt(i).eq.2) then 
+      do j=1,hbondfile_length(i)
+         read(10,*) nhbond_water(i,j), nhbond_hyd(i,j)
+      end do
+   end if
+   close(10)
+end do
+
+
+
+!initialize histograms
+!call hist_init(histfreq,1000, 0.1_wp, -0.05_wp)
+!do i=1,hist1
+!   call hist_init(histhyd1(i),1000, 0.1_wp, -0.05_wp)
+!end do
+!do i=1,hist2
+!   call hist_init(histhyd2(i),1000, 0.1_wp, -0.05_wp)
+!end do
+
+!initialize histograms
+call hist_init(histfreq, h_n, h_start, h_end)
+do i=1,hist1
+   call hist_init(histhyd1(i), h_n , h_start, h_end)
+end do
+do i=1,hist2
+   call hist_init(histhyd2(i), h_n , h_start, h_end)
+end do
+noxygen=natoms/3
+
+! now the electric field
+! ewater, the chosen water, ehyd the chosen hydrogrn
+
+!E =0
+
+
+!ind=(/0,1,-1/)
+nbox=1
+fac=1
+! if periodicity is considered
+if(period.eq.1) then 
+   !loops=3
+   ! look in 27 boxes, 3x3x3
+   !cutoff =min(cell(1),cell(2),cell(3))
+   nbox= int(2*cutoff/cell)  + 1
+else
+   ! to allow 0.0 in read cell
+   cell=1
+   fac=0
+end if
+
+write(6,*) cutoff, cell, 2*cutoff/cell
+write(6,*) "nbox", nbox
+
+!else
+   !loops=1
+!   nbox=1
+!   cutoff =10000
+!end if
+!write(6,*) "loops",loops
+
+loop1=1
+loop2=1
+flag0 =0
+
+!open outputfile
+!open(10,file=outputfile,status='unknown')
+! write to fort.11, fort.12 etc
+
+
+! if ehyd=0, loop over all hydrogens and oxygens, otherwise loop once
+if(all.eq.1) then
+   flag0=1
+   loop1=noxygen
+   loop2=2
+end if
+
+count =0 
+do j1=1,loop1
+   if(flag0.eq.1) then
+      ewater = j1
+   end if
+   
+   do j2=1,loop2
+      if(flag0.eq.1) then
+         ehyd = j2
+      end if
+
+count = count +1
+
+!calculate e-field
+call efield(x, y, z, natoms, nbox, ewater, ehyd, cell, fac, cutoff, qo, qh1, qh2, E, roh)
+E_proj = ddot(3,roh,1,E,1)
+
+! put in total histogram
+call hist_add(histfreq,E_proj, 1.0_wp)
+
+
+!check which hbondfile we want the efield to be written
+! read hbondfiles
+hist1_tmp=1
+hist2_tmp=1
+do i=1,nhbondfiles
+
+   !DD eller ND
+   if(hbondalt(i).eq.1) then 
+      do j=1,hbondfile_length(i)
+         if(nhbond_water(i,j).eq.ewater - 1) then
+            !write(10+i,*) ewater, ehyd, E_proj
+            call hist_add(histhyd1(hist1_tmp) ,E_proj, 1.0_wp)
+         end if
+      end do
+      hist1_tmp = hist1_tmp + 1
+
+   !SD
+   else if(hbondalt(i).eq.2) then 
+      do j=1,hbondfile_length(i)
+         !bonded
+         if(nhbond_water(i,j).eq.ewater -1 .and.nhbond_hyd(i,j).eq.ehyd) then
+            !write(10+i,*) ewater, ehyd, E_proj
+            call hist_add(histhyd1(hist1_tmp) ,E_proj, 1.0_wp)
+            
+         !non bonded
+         else if(nhbond_water(i,j).eq.ewater -1.and.nhbond_hyd(i,j).ne.ehyd) then
+            !write(20+i,*) ewater, ehyd, E_proj
+            call hist_add(histhyd2(hist2_tmp) ,E_proj, 1.0_wp)
+         end if
+      end do
+      hist1_tmp = hist1_tmp +1
+      hist2_tmp = hist2_tmp +1
+
+   end if
+end do
+
+!total efield
+!write(10,*) ewater, ehyd, ddot(3,roh,1,E,1)
+
+end do
+
+end do
+
+write(6,*) get_sum(histfreq)
+
+!broaden spectra
+if(broad.eq.1) then
+call hist_broadening(histfreq, fwhm)
+do i=1,hist1
+   call hist_broadening(histhyd1(i), fwhm)
+end do
+do i=1,hist2
+   call hist_broadening(histhyd2(i), fwhm)
+end do
+end if
+! write histograms
+
+!outputfile=""
+string = trim(adjustl(outputfile)) // "_total"
+call hist_write(histfreq, string )
+do i=1,hist1
+   write(string, *) i
+   string = trim(adjustl(outputfile)) // "_1_" // trim(adjustl(string))
+   call hist_write(histhyd1(i), string)
+end do
+do i=1,hist2
+   write(string, *) i
+   string = trim(adjustl(outputfile)) // "_2_" // trim(adjustl(string))
+   call hist_write(histhyd2(i), string)
+end do
+
+write(6,*) get_sum(histfreq)
+write(6,*) "count", count
+
+!close(10)
+
+end program calculate_efield
+

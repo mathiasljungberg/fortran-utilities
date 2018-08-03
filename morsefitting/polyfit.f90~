@@ -1,0 +1,293 @@
+program polyfit
+  use fcn2params
+  implicit none
+  integer:: m,n,ldfjac,info,lwa
+!  parameter (m=8,n=3,ldfjac=m,lwa=30)
+  integer,allocatable:: ipvt(:)
+  real(8):: tol
+  real(8),allocatable:: x(:),fvec(:),fjac(:,:),wa(:)
+  external fcn2,fcn3,fcn4
+!  real(8),allocatable :: y1(:),y2(:)
+  real(8)::dummy,my,freq
+  integer:: i,alt
+  
+  
+  ! read the input file
+  read(5,*) alt
+  
+  ! alt=0, fit all parameters, alt=1, don't fit dist, alt=2 don't fit energy
+  if(alt.eq.1.or.alt.eq.2) then
+     read(5,*) dist
+  end if
+  if(alt.eq.2) then
+     read(5,*) energy
+  end if
+  
+  read(5,*) m
+ 
+  ! set up parameters
+  !  m=8
+  if(alt.eq.0) n=4
+  if(alt.eq.1) n=3
+  if(alt.eq.2) n=2
+
+  ldfjac=m
+  lwa= 5*n+m
+  
+  ! allocate
+  allocate( ipvt(n),x(n),fvec(m),fjac(ldfjac,n),wa(lwa))
+  
+  ! allocate in module fcn2params
+  allocate( y1(m),y2(m))
+  
+  ! continue to read the input file
+  do i=1,m        
+     read(5,*) dummy,y1(i),y2(i) 
+  enddo
+ 
+!     the program calculates frequencies for both OH and OD stretches
+!     lwa>5*n+m, ldfjac =m
+
+      tol=1.0e-6
+
+
+!     start guesses
+
+      x(1)=0.10
+      x(2)=2.5
+      
+      if(alt.eq.0) then
+
+         x(3)=y1(5)
+         x(4)=y2(5)         
+         call lmder1(fcn2,m,n,x,fvec,fjac,ldfjac,tol,info, &
+              ipvt,wa,lwa)
+         
+      else if(alt.eq.1) then
+     
+         x(3)=y2(5)
+         call lmder1(fcn3,m,n,x,fvec,fjac,ldfjac,tol,info, &
+              ipvt,wa,lwa)
+         
+      else if(alt.eq.2) then
+         
+         call lmder1(fcn4,m,n,x,fvec,fjac,ldfjac,tol,info, &
+              ipvt,wa,lwa)
+   
+      endif
+
+
+
+!     frequency for OH stretch
+      my=18./19. 
+      call morsefreq(x(1),x(2),my,freq)
+            
+      write(6,*) 'x',x      
+      write(6,*) 'Frequency, OH',freq, 'cm-1'
+
+      call harmfreq(x(1),x(2),my,freq)
+      write(6,*) 'Frequency, OH, harm',freq, 'cm-1'
+
+!     frequency for OD stretch
+      my=34./19. 
+      call morsefreq(x(1),x(2),my,freq)
+      write(6,*)     
+      write(6,*) 'Frequency, OD',freq, 'cm-1'
+      
+      call harmfreq(x(1),x(2),my,freq)
+      write(6,*) 'Frequency, OD, harm',freq, 'cm-1'
+ 
+     end program morselmdr
+
+
+
+
+      subroutine fcn2(m,n,x,fvec,fjac,ldfjac,iflag)
+      use fcn2params
+      implicit none
+      integer:: m,n,ldfjac,iflag
+      real(8):: x(n),fvec(m),fjac(ldfjac,n)
+!
+!      double precision y1(m),y2(m)
+      integer:: i
+
+!     This function fits all parameters
+
+!     if iflag = 1 calculate the functions at x and
+!     return this vector in fvec. do not alter fjac.
+!     parametrarna x= (D,alfa,r0,c)
+      if(iflag == 1) then
+         do i=1,m
+
+         fvec(i)=x(1)*(1-exp(-x(2)*(y1(i)-x(3) )))**2 + x(4) &
+             - y2(i)
+
+         enddo
+   
+      endif
+
+!     if iflag = 2 calculate the jacobian at x and
+!     return this matrix in fjac. do not alter fvec.      
+
+      if(iflag == 2) then
+
+         do i=1,m
+         fjac(i,1)=(1-exp(-x(2)*(y1(i)-x(3) )))**2
+
+         fjac(i,2)=2*x(1)*exp(-x(2)*(y1(i)-x(3)))*(y1(i)-x(3))*(1- &
+             exp(-x(2)*(y1(i)-x(3))))
+
+
+         fjac(i,3)=-2*x(1)*exp(-x(2)*(y1(i)-x(3)))*x(2)*(1- &
+              exp(-x(2)*(y1(i)-x(3))))
+
+         fjac(i,4)=1
+         enddo
+      endif
+
+      return
+    end subroutine fcn2
+
+   subroutine fcn3(m,n,x,fvec,fjac,ldfjac,iflag)
+      use fcn2params
+      implicit none
+      integer:: m,n,ldfjac,iflag
+      real(8):: x(n),fvec(m),fjac(ldfjac,n)
+!
+!      double precision y1(m),y2(m)
+      integer:: i
+
+!     this function doesn't fit the equilibrium distance
+
+!     if iflag = 1 calculate the functions at x and
+!     return this vector in fvec. do not alter fjac.
+!     parametrarna x= (D,alfa,r0,c)
+      if(iflag == 1) then
+         do i=1,m
+
+         fvec(i)=x(1)*(1-exp(-x(2)*(y1(i)-dist )))**2 + x(3) &
+             - y2(i)
+
+         enddo
+   
+      endif
+
+!     if iflag = 2 calculate the jacobian at x and
+!     return this matrix in fjac. do not alter fvec.      
+
+      if(iflag == 2) then
+
+         do i=1,m
+         fjac(i,1)=(1-exp(-x(2)*(y1(i)-dist )))**2
+
+         fjac(i,2)=2*x(1)*exp(-x(2)*(y1(i)-dist))*(y1(i)-dist)*(1- &
+             exp(-x(2)*(y1(i)-dist)))
+
+
+!         fjac(i,3)=-2*x(1)*exp(-x(2)*(y1(i)-x(3)))*x(2)*(1-
+!     +        exp(-x(2)*(y1(i)-x(3))))
+
+         fjac(i,3)=1
+         enddo
+      endif
+
+      return
+    end subroutine fcn3
+
+
+   subroutine fcn4(m,n,x,fvec,fjac,ldfjac,iflag)
+      use fcn2params
+      implicit none
+      integer:: m,n,ldfjac,iflag
+      real(8):: x(n),fvec(m),fjac(ldfjac,n)
+!
+!      double precision y1(m),y2(m)
+      integer:: i
+
+!     this function doesn't fit the equilibrium distance nor the
+!     equilibrium energy
+
+
+!     if iflag = 1 calculate the functions at x and
+!     return this vector in fvec. do not alter fjac.
+!     parametrarna x= (D,alfa,r0,c)
+      if(iflag == 1) then
+         do i=1,m
+
+         fvec(i)=x(1)*(1-exp(-x(2)*(y1(i)-dist )))**2 + energy &
+             - y2(i)
+
+         enddo
+   
+      endif
+
+!     if iflag = 2 calculate the jacobian at x and
+!     return this matrix in fjac. do not alter fvec.      
+
+      if(iflag == 2) then
+
+         do i=1,m
+         fjac(i,1)=(1-exp(-x(2)*(y1(i)-dist )))**2
+
+         fjac(i,2)=2*x(1)*exp(-x(2)*(y1(i)-dist))*(y1(i)-dist)*(1- &
+             exp(-x(2)*(y1(i)-dist)))
+
+
+!         fjac(i,3)=-2*x(1)*exp(-x(2)*(y1(i)-x(3)))*x(2)*(1-
+!     +        exp(-x(2)*(y1(i)-x(3))))
+
+!         fjac(i,3)=1
+         enddo
+      endif
+
+      return
+    end subroutine fcn4
+
+
+
+
+    subroutine morsefreq(d,a,my,freq)
+      use parameters
+      implicit none
+!     rutinen beräknar frekvensen för morsepotential med parameterarna
+!     d =D och a =alfa, my är reducerade massan 
+!     amu=1.659913245226400e-27, gammal definition
+!     hartree konstanten uppdaterades 11/8 -06
+!      real(8),parameter:: hbar=1.05457168e-34,amu=1.66053873e-27, &
+!           pi = 3.14159265,c=2.99792458e8,hartree=4.35974418e-18    
+      real(8),intent(in):: d,a,my
+      real(8),intent(out)::freq
+      real(8):: f,t
+      
+      F=d*hartree/(2*pi*hbar*c)
+      T=a*1.0e10*hbar/sqrt(2*amu*my*d*hartree)
+      
+      freq = 2*F*T - F*(T**2)*((1.5)**2-0.25)
+
+      freq=freq/100
+
+      return
+    end subroutine morsefreq
+
+
+ subroutine harmfreq(d,a,my,freq)
+      use parameters
+      implicit none
+!     rutinen beräknar frekvensen för morsepotential med parameterarna
+!     d =D och a =alfa, my är reducerade massan 
+!     amu=1.659913245226400e-27, gammal definition
+!     hartree konstanten uppdaterades 11/8 -06
+!      real(8),parameter:: hbar=1.05457168e-34,amu=1.66053873e-27, &
+!           pi = 3.14159265,c=2.99792458e8,hartree=4.35974418e-18    
+      real(8),intent(in):: d,a,my
+      real(8),intent(out)::freq
+      real(8):: D_SI,a_SI,my_SI
+      
+      D_SI = d*hartree
+      a_SI = a*1.0e10
+      my_SI = my*amu
+
+      freq = sqrt(2.*D_SI/my_SI)*a_SI*cm*hbar
+
+      return
+    end subroutine polyfit

@@ -1,0 +1,53 @@
+module m_poisson_1d_finite_diff
+  implicit none
+contains
+
+  ! this routine solves [ d^2/dx + eps'(x)*d/dx ] v(x) = c * \rho(x) / eps(x) 
+  ! where eps and eps' is the dielectric function and its derivative, c is a constant
+  ! and left and right boundary conditions should be specified quite freely.
+  ! For now, we use fixed bc, that is v(1) = v_1 and v(N) = v_N
+  ! this can also treat dipole correction boundary conditions
+  ! 
+  subroutine poisson_1d_fd_eps(x, rho, c, flag_use_eps, eps, v_1, v_N, v)
+    real(8), intent(in):: x(:)
+    real(8), intent(in):: rho(:)
+    real(8), intent(in):: c
+    logical, intent(in):: flag_use_eps
+    real(8), intent(in):: eps(:)
+    real(8), intent(in):: v_1, v_N
+    real(8), intent(out):: v(:)
+
+    real(8):: dx
+    integer:: N
+
+    ! Test: ingore eps
+
+    dx = x(2)-x(1)
+    
+    ! diagonal
+    
+    do i=1,npoints
+      diag(i) = -2.0_wp / dx**2 + c * rho(i) 
+
+    end do
+
+    ! subdiagonalen
+    do i=1,npoints-1
+      subdiag(i) = -hbar**2/(dx**2 *2.0_wp *mu)
+    end do
+
+    ! solve eigenvalue problem
+    abstol=2d0*dlamch('s')
+    call dstevx('v','i',npoints,diag,subdiag, 0.d0,1.d0, 1, nstates, abstol, &
+         n_eigfound, eigenval , eigenvec, npoints,work,iwork,ifail,info)
+
+    eigvec(:,1:nstates) = eigenvec(:,1:nstates)
+    eigval(1:nstates) = eigenval(1:nstates)
+    
+    
+
+
+    
+  end subroutine poisson_1d_fd_eps
+  
+end module m_poisson_1d_finite_diff

@@ -1,0 +1,1 @@
+gfortran ../parameters.f90  addmanygraphs_new.f90 ../linspace.f90 ../spline_easy.f90 ../splines.f -o addmanygraphs_new

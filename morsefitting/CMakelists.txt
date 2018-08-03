@@ -1,0 +1,17 @@
+
+SET(ALL_MODULES_F90 
+fcn2params.f90
+fcn8params.f90
+fitting_routines.f90
+morse_fit.f90
+morse_fit_fixfreq.f90
+morselmdr_fixdist.f90
+polyfit.f90
+spline_energy.f90
+)
+
+SET(ALL_MODULES_F 
+lmder.f
+)
+
+ADD_LIBRARY(morsefitting STATIC ${ALL_MODULES_F90} ${ALL_MODULES_F})

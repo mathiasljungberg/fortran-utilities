@@ -24,6 +24,7 @@ ELSE(CMAKE_Fortran_COMPILER MATCHES gfortran)
     # gfortran/mac
     #SET(FLAGS "-O0  -fbounds-check -ffree-line-length-none -framework vecLib -DUSE_OWN_CZDOT")
     SET(FLAGS "-O0  -fbounds-check -framework vecLib -DUSE_OWN_CZDOT")  
+    SET(CMAKE_Fortran_FLAGS ${FLAGS})
     SET(INCDIR "-I/usr/local/include -I/usr/include")
     #SET(OMP_FLAGS "")
     #SET(FFTW_LIB "-L/usr/local/lib -lfftw3 -lm")
@@ -47,25 +48,24 @@ ENDIF(CMAKE_Fortran_COMPILER MATCHES ifort)
 
 
 SET(ALL_MODULES_F90 
-m_FFT.f90               hist_2d_class.f90       spline_easy2d.f90
-delta.f90               hist_class.f90          match_wild.f90          spline_easy.f90         spline_m.f90
-fcn3params.f90          linspace.f90            parameters.f90          qsort_c_module.f90      spline_easy2.f90
-m_splines.F90
+m_poisson_1d_finite_diff.F90
 )
 
 SET(ALL_MODULES_F 
-bubblesort.f    crossprod.f     factorials.f    rnd.f           sffteu.f        splib.f         splines.f
 )
 
 
-ADD_LIBRARY(fortran-utilities STATIC ${ALL_MODULES_F90} ${ALL_MODULES_F})
+#ADD_LIBRARY(fortran-utilities STATIC ${ALL_MODULES_F90} ${ALL_MODULES_F})
+#
+#add_subdirectory(morsefitting morsefitting)
+#add_subdirectory(plotting plotting)
 
-add_subdirectory(morsefitting morsefitting)
-add_subdirectory(plotting plotting)
+SET(EXECUTABLES
+test_poisson
+)
 
-
-#FOREACH(EXEC ${EXECUTABLES})
-#  ADD_EXECUTABLE(${EXEC} ${EXEC}.F90 ${ALL_MODULES})
-#  TARGET_LINK_LIBRARIES(${EXEC} ${LAPACK_LIBRARIES} 
-#    ${LINK_ADDONS})
-#ENDFOREACH(EXEC)
+FOREACH(EXEC ${EXECUTABLES})
+  ADD_EXECUTABLE(${EXEC} ${EXEC}.F90 ${ALL_MODULES_F90})
+  TARGET_LINK_LIBRARIES(${EXEC} ${LAPACK_LIBRARIES} 
+    ${LINK_ADDONS})
+ENDFOREACH(EXEC)

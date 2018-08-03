@@ -97,6 +97,7 @@ c
       REAL(8) a,b,h
       klo=1
       khi=n
+
  1    if (khi-klo.gt.1) then
          k=(khi+klo)/2
          if(xa(k).gt.x)then
@@ -106,10 +107,11 @@ c
          endif
          goto 1
       endif
+
       h=xa(khi)-xa(klo)
       
-      
-      if (abs(h) .le. 1.0d-10) then
+      if (abs(h) .le. 1.0d-20) then
+      !if (h .eq. 0.0d0) then
          write(6,*) "bad xa input in splint"
          stop
       endif
@@ -117,6 +119,7 @@ c
       b=(x-xa(klo))/h
       y=a*ya(klo)+b*ya(khi)+((a**3-a)*y2a(klo)+(b**3-b)*y2a(khi))*(h**
      *2)/6.d0
+
       return
       END
 
